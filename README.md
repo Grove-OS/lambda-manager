@@ -2,76 +2,25 @@
 
 Lambda is a minimalist declarative package manager written in POSIX shell.
 
-Instead of manually telling the package manager what to install and remove, Lambda uses a declared system state and reconciles the actual system with it.
+Instead of immediately installing or removing packages, Lambda maintains a **desired system state** and reconciles the actual system against it.
 
 > Lambda is currently under development and should be considered experimental.
 
 ## How it works
 
-Lambda uses two JSON files to represent the desired and current package states:
+Lambda separates **declaring changes** from **applying changes**.
 
-- `/etc/lambda/system.json` — packages the system should have
-- `/var/lib/lambda/state.json` — packages currently managed by Lambda
-
-For example:
-
-```json
-{
-    "packages": [
-        "vim",
-        "llvm",
-        "openssh"
-    ]
-}
-````
-
-Lambda does not immediately modify the system when the desired state is changed.
-
-Instead, the desired state is modified first, and `lambda reconcile` is used to bring the actual system into compliance.
+The desired state is modified using `lambda mutate`, while `lambda reconcile` applies the differences to the actual system.
 
 ```text
-desired state
-     │
-     │ mutate
-     ▼
-system.json
-     │
-     │ reconcile
-     ▼
-actual system
-```
-
-If the states are already synchronized:
-
-```text
-lambda: reconciling system packages...
-lambda: nothing to reconcile.
-```
-
-Otherwise, Lambda displays the required changes and asks for confirmation before proceeding.
-
-## Mutating the system state
-
-The desired package state can be modified using `lambda mutate`.
-
-Append a package to the desired state:
-
-```sh
-lambda mutate append vim
-```
-
-Purge a package from the desired state:
-
-```sh
-lambda mutate purge vim
-```
-
-These commands **do not install or remove packages immediately**. They only modify `/etc/lambda/system.json`.
-
-To apply the changes:
-
-```sh
-lambda reconcile
+          mutate
+             │
+             ▼
+      desired state
+             │
+             │ reconcile
+             ▼
+       actual system
 ```
 
 For example:
@@ -82,40 +31,68 @@ lambda mutate append llvm
 lambda reconcile
 ```
 
-This declares that `vim` and `llvm` should be installed, then reconciles the actual system with that declaration.
+Lambda will determine what needs to change and ask for confirmation before proceeding.
 
-Likewise:
+If everything is already synchronized:
+
+```text
+lambda: reconciling system packages...
+lambda: nothing to reconcile.
+```
+
+## Mutating the system state
+
+Use `lambda mutate` to modify the desired package state.
+
+Append a package:
+
+```sh
+lambda mutate append vim
+```
+
+Purge a package:
 
 ```sh
 lambda mutate purge vim
+```
+
+Multiple packages can be specified at once:
+
+```sh
+lambda mutate append vim curl openssh
+```
+
+These commands **do not immediately install or remove packages**. They only modify the desired system state.
+
+Changes are applied with:
+
+```sh
 lambda reconcile
 ```
 
-declares that `vim` should no longer be present and then applies that change.
+This separation makes it possible to declare several changes and apply them together.
 
 ## Package installation
 
-Lambda installs packages using a staging directory instead of writing directly to the real filesystem.
+Lambda uses a staging-based installation process.
 
-The general installation process is:
+Packages are first downloaded, built, and installed into a temporary filesystem tree rather than directly into `/`.
 
 ```text
 download
    ↓
 build
    ↓
-install into staging
-   ↓
-verify staged files
+staged installation
    ↓
 commit to filesystem
    ↓
-create package manifest
+manifest
    ↓
-update system state
+state update
 ```
 
-For example, a package may be staged under:
+A typical staging directory looks like:
 
 ```text
 /tmp/lambda-vim-XXXXXX/
@@ -126,15 +103,17 @@ For example, a package may be staged under:
         └── share/
 ```
 
-The `root/` directory acts as the package's temporary filesystem root.
+The `root/` directory acts as the temporary filesystem root through `DESTDIR`.
 
-Only after the package has successfully downloaded, built, and installed into the staging directory does Lambda commit the staged files to the real filesystem.
+Only after the package successfully completes its build and installation steps does Lambda commit the staged files to the real filesystem.
 
-This prevents failed builds from leaving partially installed files scattered throughout the system.
+This prevents failed builds from leaving partially installed files behind.
 
 ## Package manifests
 
-After successfully installing a package, Lambda creates a manifest under:
+After installing a package, Lambda records the files that were actually installed.
+
+Manifests are stored in:
 
 ```text
 /usr/share/lambda/installed/
@@ -146,70 +125,51 @@ For example:
 /usr/share/lambda/installed/vim.json
 ```
 
-A manifest records the package name, version, and files installed by the package:
+These manifests allow Lambda to track package ownership and provide the information required for package removal.
 
-```json
-{
-    "name": "vim",
-    "version": "9.1",
-    "files": [
-        "/usr/bin/vim",
-        "/usr/share/vim/vimrc"
-    ]
-}
-```
+## Dependencies
 
-These manifests keep track of files belonging to installed packages and allow package removal to operate on the files actually installed by Lambda.
+Lambda supports package dependencies declared by package recipes.
+
+When a package requires another package, Lambda recursively resolves and installs its dependencies before installing the requested package.
+
+Already-installed dependencies are skipped.
+
+The dependency chain is also recorded in the desired system state so that the complete package closure remains declarative.
 
 ## Package recipes
 
-Lambda packages are described using JSON files.
+Lambda uses JSON package recipes containing the commands required to download, build, and install a package.
 
-Example:
+The recipes are stored locally under:
 
-```json
-{
-    "name": "vim",
-    "description": "Highly configurable text editor.",
-    "version": "9.1",
-    "dependencies": [
-        "ncurses"
-    ],
-    "download": [
-        "curl -fL --retry 3 --retry-delay 2 -o v9.1.0000.tar.gz https://github.com/vim/vim/archive/refs/tags/v9.1.0000.tar.gz",
-        "tar -xf v9.1.0000.tar.gz"
-    ],
-    "build": [
-        "cd vim-9.1.0000 && ./configure --prefix=\"$PREFIX\"",
-        "cd vim-9.1.0000 && make $MAKEOPTS"
-    ],
-    "install": [
-        "cd vim-9.1.0000 && make DESTDIR=\"$DESTDIR\" install"
-    ]
-}
+```text
+/usr/share/lambda/packages/
 ```
 
-Recipes contain:
+The package recipe format is maintained separately in the official package repository.
 
-* `name` — package name
-* `description` — package description
-* `version` — package version
-* `dependencies` — required packages
-* `download` — commands used to download and extract the source
-* `build` — commands used to build the package
-* `install` — commands used to install the package
+Official recipes:
 
-The commands in a recipe are executed sequentially by Lambda.
+https://github.com/Grove-OS/packages
+
+**Package recipes contain executable shell commands.** Always inspect and trust a recipe before installing it.
+
+If you use recipes from a community repository or another source, make sure the source is trustworthy.
+
+A malicious recipe can execute arbitrary commands with the privileges used by Lambda.
 
 ## Build configuration
 
-Lambda loads its build environment from:
+Lambda loads the build environment from:
 
 ```text
 /etc/lambda/make.conf
 ```
 
-Example:
+This keeps system-specific build settings separate from package recipes.
+
+For example:
 
 ```sh
 CC="clang"
@@ -224,45 +184,27 @@ PREFIX="/usr"
 MAKEOPTS="-j6"
 ```
 
-Variables such as `CC`, `CFLAGS`, `LDFLAGS`, `PREFIX`, `MAKEOPTS`, and `DESTDIR` are exported to package build commands.
-
-This allows package recipes to remain relatively simple while keeping system-specific build configuration in one place.
-
-## Security
-
-**Package recipes contain executable shell commands.**
-
-Lambda executes the commands defined in a package recipe when downloading, building, and installing a package.
-
-Because of this, **you must trust a package recipe before using it**.
-
-Official Lambda recipes are maintained in the official package repository:
-
-[https://github.com/kworkerr/null-packages](https://github.com/kworkerr/null-packages)
-
-If you obtain a package recipe from a community repository or another source, inspect it carefully and make sure you trust its author before installing it.
-
-A malicious recipe can execute arbitrary commands with the privileges used by Lambda.
+Variables such as `CC`, `CFLAGS`, `LDFLAGS`, `PREFIX`, and `MAKEOPTS` are made available to package build commands.
 
 ## Installation
 
 Clone Lambda:
 
 ```sh
-git clone https://github.com/kworkerr/lambda-manager
+git clone https://github.com/Grove-OS/lambda-manager
 cd lambda-manager
 ```
 
 Clone the official package repository:
 
 ```sh
-git clone https://github.com/kworkerr/null-packages
+git clone https://github.com/Grove-OS/packages
 ```
 
 Copy the package recipes:
 
 ```sh
-cp null-packages/packages/* packages/
+cp packages/packages/* packages/
 ```
 
 Install Lambda:
@@ -273,54 +215,12 @@ sudo ./install.sh
 
 The installation script installs:
 
-* Lambda to `/usr/bin/lambda`
-* Configuration to `/etc/lambda/`
-* Runtime state to `/var/lib/lambda/`
-* Lambda components to `/usr/lib/lambda/`
-* Package recipes to `/usr/share/lambda/packages/`
-
-## Configuration
-
-The desired system state is stored in:
-
-```text
-/etc/lambda/system.json
-```
-
-Lambda's current managed state is stored in:
-
-```text
-/var/lib/lambda/state.json
-```
-
-Lambda's build configuration is stored in:
-
-```text
-/etc/lambda/make.conf
-```
-
-Lambda's package recipes are stored in:
-
-```text
-/usr/share/lambda/packages/
-```
-
-Installed package manifests are stored in:
-
-```text
-/usr/share/lambda/installed/
-```
-
-Additional Lambda components are stored in:
-
-```text
-/usr/lib/lambda/
-```
-
-The executable itself is installed to:
-
 ```text
 /usr/bin/lambda
+/etc/lambda/
+/var/lib/lambda/
+/usr/lib/lambda/
+/usr/share/lambda/packages/
 ```
 
 ## Usage
@@ -331,50 +231,72 @@ Show help:
 lambda --help
 ```
 
-Modify the desired package state:
+Modify the desired system state:
 
 ```sh
 lambda mutate append <package>
 lambda mutate purge <package>
 ```
 
-For example:
+Example:
 
 ```sh
-lambda mutate append vim
+lambda mutate append vim curl openssh
 lambda mutate purge nano
 ```
 
-Reconcile the system:
+Apply the desired state:
 
 ```sh
 lambda reconcile
 ```
 
-Lambda will determine the differences between the desired and current states and ask for confirmation before making changes.
-
-A typical workflow looks like:
+A typical workflow:
 
 ```sh
-lambda mutate append vim
-lambda mutate append openssh
+lambda mutate append vim curl openssh
 lambda mutate purge nano
 
 lambda reconcile
 ```
+
+## Architecture
+
+Lambda is intentionally small and built around a few simple components:
+
+```text
+lambda
+├── command dispatch
+├── mutate
+├── reconcile
+└── package installation
+```
+
+The system is represented through a small number of files:
+
+```text
+/etc/lambda/system.json
+/var/lib/lambda/state.json
+/etc/lambda/make.conf
+/usr/share/lambda/packages/
+/usr/share/lambda/installed/
+```
+
+The package manager itself is implemented in POSIX shell, with JSON processing handled by `jq`.
 
 ## Philosophy
 
 Lambda aims to keep package management simple.
 
-The system state should be easy to inspect, package recipes should be readable, and the package manager itself should remain small and understandable.
+The desired system state should be easy to inspect, changes should be explicit, and package installation should be predictable.
 
-No giant dependency resolver.
-No complicated package format.
+No giant package manager.
 No unnecessary abstraction.
+No imperative installation state hidden behind commands.
 
-Just JSON, shell, and a system state to reconcile.
+Just a declared system state, package recipes, and reconciliation.
 
 ## License
 
 See [LICENSE](LICENSE).
+
