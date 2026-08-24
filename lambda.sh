@@ -35,4 +35,5 @@ elif [ "$1" = "mutate" ]; then
   exit $?
 else
   usage
+  exit 0
 fi
