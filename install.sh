@@ -20,14 +20,20 @@ lambda_installer()
     echo "Creating /usr/lib/lambda/ ..."
     mkdir -pv /usr/lib/lambda/ || return 1
 
-    echo "Installing funcs/reconcile.sh to /usr/lib/lambda/ ..."
-    install -m 644 funcs/reconcile.sh /usr/lib/lambda/reconcile.sh || return 1
+    echo "Installing funcs/lambda_reconcile.sh to /usr/lib/lambda/ ..."
+    install -m 644 funcs/lambda_reconcile.sh /usr/lib/lambda/lambda_reconcile.sh || return 1
 
     echo "Installing funcs/lambda_install.sh to /usr/lib/lambda/ ..."
     install -m 644 funcs/lambda_install.sh /usr/lib/lambda/lambda_install.sh || return 1
 
     echo "Installing funcs/lambda_remove.sh to /usr/lib/lambda/ ..."
     install -m 644 funcs/lambda_remove.sh /usr/lib/lambda/lambda_remove.sh || return 1
+
+    echo "Installing funcs/lambda_mutate.sh to /usr/lib/lambda/ ..."
+    install -m 644 funcs/lambda_mutate.sh /usr/lib/lambda/lambda_mutate.sh || return 1
+
+    echo "Creating /usr/share/lambda/installed/ ..."
+    mkdir -pv /usr/share/lambda/installed/ || return 1
 
     echo "Creating /usr/share/lambda/packages/ ..."
     mkdir -pv /usr/share/lambda/packages/ || return 1
