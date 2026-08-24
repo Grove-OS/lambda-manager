@@ -1,7 +1,7 @@
 . /usr/lib/lambda/lambda_install.sh
 . /usr/lib/lambda/lambda_remove.sh
 
-reconcile()
+lambda_reconcile()
 {
     system_packages=$(jq -c '.packages' /etc/lambda/system.json)
     state_packages=$(jq -c '.packages' /var/lib/lambda/state.json)
@@ -14,7 +14,7 @@ reconcile()
 
     if [ "$(id -u)" -ne 0 ]; then
         echo "lambda: this command must be run as root."
-        exit 1
+        return 1
     fi
 
     install_packages=$(jq -n -r \
