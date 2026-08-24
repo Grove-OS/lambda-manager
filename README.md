@@ -192,7 +192,6 @@ Clone Lambda:
 
 ```sh
 git clone https://github.com/Grove-OS/lambda-manager
-cd lambda-manager
 ```
 
 Clone the official package repository:
@@ -204,12 +203,13 @@ git clone https://github.com/Grove-OS/packages
 Copy the package recipes:
 
 ```sh
-cp packages/packages/* packages/
+cp packages/packages/* lambda-manager/packages/
 ```
 
 Install Lambda:
 
 ```sh
+cd lambda-manager
 sudo ./install.sh
 ```
 
