@@ -23,15 +23,23 @@ For example:
         "openssh"
     ]
 }
+````
+
+Lambda does not immediately modify the system when the desired state is changed.
+
+Instead, the desired state is modified first, and `lambda reconcile` is used to bring the actual system into compliance.
+
+```text
+desired state
+     │
+     │ mutate
+     ▼
+system.json
+     │
+     │ reconcile
+     ▼
+actual system
 ```
-
-When running:
-
-```sh
-lambda reconcile
-```
-
-Lambda compares both states and determines what needs to be installed or removed.
 
 If the states are already synchronized:
 
@@ -41,6 +49,49 @@ lambda: nothing to reconcile.
 ```
 
 Otherwise, Lambda displays the required changes and asks for confirmation before proceeding.
+
+## Mutating the system state
+
+The desired package state can be modified using `lambda mutate`.
+
+Append a package to the desired state:
+
+```sh
+lambda mutate append vim
+```
+
+Purge a package from the desired state:
+
+```sh
+lambda mutate purge vim
+```
+
+These commands **do not install or remove packages immediately**. They only modify `/etc/lambda/system.json`.
+
+To apply the changes:
+
+```sh
+lambda reconcile
+```
+
+For example:
+
+```sh
+lambda mutate append vim
+lambda mutate append llvm
+lambda reconcile
+```
+
+This declares that `vim` and `llvm` should be installed, then reconciles the actual system with that declaration.
+
+Likewise:
+
+```sh
+lambda mutate purge vim
+lambda reconcile
+```
+
+declares that `vim` should no longer be present and then applies that change.
 
 ## Package installation
 
@@ -108,7 +159,7 @@ A manifest records the package name, version, and files installed by the package
 }
 ```
 
-These manifests are used to keep track of files belonging to installed packages and will also allow package removal to operate on the files actually installed by Lambda.
+These manifests keep track of files belonging to installed packages and allow package removal to operate on the files actually installed by Lambda.
 
 ## Package recipes
 
@@ -199,7 +250,6 @@ Clone Lambda:
 
 ```sh
 git clone https://github.com/kworkerr/lambda-manager
-
 cd lambda-manager
 ```
 
@@ -221,7 +271,13 @@ Install Lambda:
 sudo ./install.sh
 ```
 
-After installation, Lambda and its package recipes will be installed into the system.
+The installation script installs:
+
+* Lambda to `/usr/bin/lambda`
+* Configuration to `/etc/lambda/`
+* Runtime state to `/var/lib/lambda/`
+* Lambda components to `/usr/lib/lambda/`
+* Package recipes to `/usr/share/lambda/packages/`
 
 ## Configuration
 
@@ -231,7 +287,7 @@ The desired system state is stored in:
 /etc/lambda/system.json
 ```
 
-Lambda's current state is stored in:
+Lambda's current managed state is stored in:
 
 ```text
 /var/lib/lambda/state.json
@@ -275,6 +331,20 @@ Show help:
 lambda --help
 ```
 
+Modify the desired package state:
+
+```sh
+lambda mutate append <package>
+lambda mutate purge <package>
+```
+
+For example:
+
+```sh
+lambda mutate append vim
+lambda mutate purge nano
+```
+
 Reconcile the system:
 
 ```sh
@@ -282,6 +352,16 @@ lambda reconcile
 ```
 
 Lambda will determine the differences between the desired and current states and ask for confirmation before making changes.
+
+A typical workflow looks like:
+
+```sh
+lambda mutate append vim
+lambda mutate append openssh
+lambda mutate purge nano
+
+lambda reconcile
+```
 
 ## Philosophy
 
@@ -298,4 +378,3 @@ Just JSON, shell, and a system state to reconcile.
 ## License
 
 See [LICENSE](LICENSE).
-
