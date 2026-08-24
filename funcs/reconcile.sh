@@ -12,6 +12,11 @@ reconcile()
         return 0
     fi
 
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "lambda: this command must be run as root."
+        exit 1
+    fi
+
     install_packages=$(jq -n -r \
         --slurpfile system /etc/lambda/system.json \
         --slurpfile state /var/lib/lambda/state.json \
