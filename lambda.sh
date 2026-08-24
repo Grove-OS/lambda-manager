@@ -8,6 +8,7 @@ usage()
     echo "Minimalist package manager"
     echo ""
     echo "--help      Displays this menu"
+    echo "reconcile   Apply the changes to system"
 }
 
 if [ "$#" -eq 0 ]; then
