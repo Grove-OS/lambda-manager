@@ -151,7 +151,7 @@ The package recipe format is maintained separately in the official package repos
 
 Official recipes:
 
-https://github.com/Grove-OS/packages
+https://github.com/VindLinux/packages
 
 **Package recipes contain executable shell commands.** Always inspect and trust a recipe before installing it.
 
@@ -191,13 +191,13 @@ Variables such as `CC`, `CFLAGS`, `LDFLAGS`, `PREFIX`, and `MAKEOPTS` are made a
 Clone Lambda:
 
 ```sh
-git clone https://github.com/Grove-OS/lambda-manager
+git clone https://github.com/VindLinux/lambda-manager
 ```
 
 Clone the official package repository:
 
 ```sh
-git clone https://github.com/Grove-OS/packages
+git clone https://github.com/VindLinux/packages
 ```
 
 Copy the package recipes:
